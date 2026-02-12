@@ -492,6 +492,29 @@ function renderCategoryButtons() {
 }
 
 // --- Send All Photos in a Category ---
+const BATCH_MAX_BYTES = 50 * 1024 * 1024; // 50MB limit (Chrome 64MB siniri icin guvenli)
+
+// base64 dosyalarini boyuta gore gruplara bol
+function splitIntoBatches(files) {
+  const batches = [];
+  let current = [];
+  let currentSize = 0;
+
+  for (const f of files) {
+    const size = f.base64.length; // base64 string uzunlugu ~ byte boyutu
+    // Tek dosya bile limite yakinsa kendi basina grup olsun
+    if (current.length > 0 && currentSize + size > BATCH_MAX_BYTES) {
+      batches.push(current);
+      current = [];
+      currentSize = 0;
+    }
+    current.push(f);
+    currentSize += size;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
 async function sendCategory(categoryName, btnElement) {
   if (isSending) return;
   isSending = true;
@@ -511,37 +534,70 @@ async function sendCategory(categoryName, btnElement) {
 
   try {
     const tab = await getWhatsAppTab();
-    showToast(files.length + ' fotograf hazirlaniyor...', 'info');
-
-    // Tum dosyalari base64'e cevir
-    const allFiles = [];
-    for (const fileInfo of files) {
-      const data = await getFileData(fileInfo);
-      allFiles.push(data);
-    }
-
-    // Content script'e toplu gonder
     await ensureContentScript(tab);
 
-    // Fotograflari caption ile birlikte gonder
-    await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id, {
-        action: 'SEND_PHOTOS_BATCH',
-        data: { files: allFiles, caption: categoryName },
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response?.error || 'Bilinmeyen hata'));
-        }
-      });
-    });
+    // Tum dosyalari base64'e cevir (bulunamayanları atla)
+    const allFiles = [];
+    let skipped = 0;
+    for (const fileInfo of files) {
+      try {
+        const data = await getFileData(fileInfo);
+        allFiles.push(data);
+      } catch (e) {
+        skipped++;
+        console.warn('[WPPhoto] Dosya okunamadi, atlaniyor: ' + fileInfo.name, e.message);
+      }
+    }
 
-    showToast(files.length + ' foto gonderildi!', 'success');
+    if (allFiles.length === 0) {
+      showToast('Hicbir dosya okunamadi (klasoru yenileyin)', 'error');
+      return;
+    }
+
+    if (skipped > 0) {
+      showToast(skipped + ' dosya atlandi (bulunamadi)', 'info');
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Boyuta gore gruplara bol
+    const batches = splitIntoBatches(allFiles);
+
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b];
+      const isLastBatch = b === batches.length - 1;
+
+      if (batches.length > 1) {
+        showToast('Grup ' + (b + 1) + '/' + batches.length + ' gonderiliyor (' + batch.length + ' foto)...', 'info');
+      } else {
+        showToast(batch.length + ' fotograf gonderiliyor...', 'info');
+      }
+
+      // Sadece son grupta caption gonder
+      await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'SEND_PHOTOS_BATCH',
+          data: { files: batch, caption: isLastBatch ? categoryName : null },
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (response && response.success) {
+            resolve(response);
+          } else {
+            reject(new Error(response?.error || 'Bilinmeyen hata'));
+          }
+        });
+      });
+
+      // Gruplar arasi bekleme (WhatsApp islesin)
+      if (!isLastBatch) {
+        const waitMs = Math.max(5000, batch.length * 1500);
+        await new Promise(r => setTimeout(r, waitMs));
+      }
+    }
+
+    showToast(allFiles.length + ' foto gonderildi!', 'success');
     await trackShareToContact();
   } catch (err) {
     showToast('Gonderilemedi: ' + err.message, 'error');
@@ -615,27 +671,49 @@ async function sendAllCategories() {
       if (btnElement) btnElement.classList.add('sending');
 
       try {
+        // Dosyalari oku (bulunamayanları atla)
         const allFiles = [];
         for (const fileInfo of files) {
-          allFiles.push(await getFileData(fileInfo));
+          try {
+            allFiles.push(await getFileData(fileInfo));
+          } catch (e) {
+            console.warn('[WPPhoto] Dosya okunamadi, atlaniyor: ' + fileInfo.name);
+          }
         }
 
-        await new Promise((resolve, reject) => {
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'SEND_PHOTOS_BATCH',
-            data: { files: allFiles, caption: name },
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
-            if (response && response.success) {
-              resolve(response);
-            } else {
-              reject(new Error(response?.error || 'Bilinmeyen hata'));
-            }
+        if (allFiles.length === 0) {
+          throw new Error('Hicbir dosya okunamadi');
+        }
+
+        // Boyuta gore gruplara bol ve sirayla gonder
+        const batches = splitIntoBatches(allFiles);
+        for (let b = 0; b < batches.length; b++) {
+          if (sendAllCancelled) break;
+          const batch = batches[b];
+          const isLastBatch = b === batches.length - 1;
+
+          await new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'SEND_PHOTOS_BATCH',
+              data: { files: batch, caption: isLastBatch ? name : null },
+            }, (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+              }
+              if (response && response.success) {
+                resolve(response);
+              } else {
+                reject(new Error(response?.error || 'Bilinmeyen hata'));
+              }
+            });
           });
-        });
+
+          if (!isLastBatch) {
+            const waitMs = Math.max(5000, batch.length * 1500);
+            await new Promise(r => setTimeout(r, waitMs));
+          }
+        }
 
         sent++;
         showToast((i + 1) + '/' + total + ' - ' + name + ' gonderildi', 'success');
