@@ -179,10 +179,14 @@ if (window.__wpphoto_loaded) {
     }
     console.log('[WPPhoto] Caption input: ' + (captionInput ? 'found' : 'not found'));
 
-    if (captionInput) {
-      captionInput.focus();
-      await sleep(300); // CAPTION_FOCUS
+    // If no caption input found, paste likely failed - media preview never opened
+    if (!captionInput) {
+      console.error('[WPPhoto] Media preview did not open - paste failed');
+      throw new Error('Fotograflar yapistirilmadi - media preview acilmadi');
     }
+
+    captionInput.focus();
+    await sleep(300); // CAPTION_FOCUS
 
     // Send: try 3 methods in order
     let sent = false;

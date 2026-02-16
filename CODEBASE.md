@@ -20,7 +20,7 @@
 
 > **Legend:** `file.ts <- A.tsx, B.tsx` = This file is **imported by** A.tsx and B.tsx.
 > Directories with `[N files: ...]` are summarized to reduce size.
-> [STATS] Showing 2 files. 1 dirs summarized, 0 dirs excluded (node_modules, etc.)
+> [STATS] Showing 2 files. 1 dirs summarized, 1 dirs excluded (node_modules, etc.)
 
 
 ```

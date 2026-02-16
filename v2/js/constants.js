@@ -26,7 +26,7 @@ WP.config = {
     CHAT_SWITCH_CHECK: 500,   // Polling interval to check if chat switched
     CHAT_SWITCH_MAX: 10,      // Max polls for chat switch (10 * 500ms = 5s)
     INTER_BATCH: (count) => Math.max(3000, count * 800),   // Between photo batches
-    INTER_CATEGORY: 3000,     // Between categories in send-all
+    INTER_CATEGORY: 5000,     // Between categories in send-all
     INTER_TRIGGER: 10000,     // After auto-trigger send, wait before next queue item
     CONTENT_INJECT: 500,      // After injecting content script via executeScript
   },
