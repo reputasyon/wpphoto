@@ -282,12 +282,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // =========================================================
-// Mesaj izleyici: #kategori + selamlama algilama
+// Mesaj izleyici: #kategori algilama
 // WeakSet ile dedup, sidebar + aktif chat
 // =========================================================
 const seenSpans = new WeakSet();
 let sidebarSwitching = false;
 let autoModeEnabled = false;
+
+// Ayni kategori tetikleyicisini tekrar gondermemek icin cooldown
+const processedTriggers = new Map(); // "chatName:#category" -> timestamp
+const TRIGGER_COOLDOWN_MS = 5 * 60 * 1000; // 5 dakika
+
+
+function shouldProcessTrigger(chatName, category) {
+  const key = (chatName || 'unknown') + ':#' + category.toLowerCase();
+  const lastTime = processedTriggers.get(key);
+  if (lastTime && Date.now() - lastTime < TRIGGER_COOLDOWN_MS) return false;
+  processedTriggers.set(key, Date.now());
+  // Eski kayitlari temizle
+  if (processedTriggers.size > 100) {
+    const cutoff = Date.now() - TRIGGER_COOLDOWN_MS;
+    for (const [k, v] of processedTriggers) {
+      if (v < cutoff) processedTriggers.delete(k);
+    }
+  }
+  return true;
+}
 
 // Kayitli durumu yukle
 chrome.storage.local.get('autoMode', result => {
@@ -295,59 +315,12 @@ chrome.storage.local.get('autoMode', result => {
   console.log('[WPPhoto] Otomatik mod baslangic: ' + (autoModeEnabled ? 'ACIK' : 'KAPALI'));
 });
 
-// --- 14 gun karsilama kurali ---
-const GREETING_STORAGE_KEY = 'wpphoto-greetings';
-const GREETING_COOLDOWN_DAYS = 14;
-
-function getGreetingLog() {
-  try { return JSON.parse(localStorage.getItem(GREETING_STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-function shouldSendGreeting(chatName) {
-  const log = getGreetingLog();
-  const lastTime = log[chatName];
-  if (!lastTime) return true;
-  return (Date.now() - lastTime) / (1000 * 60 * 60 * 24) >= GREETING_COOLDOWN_DAYS;
-}
-
-function markGreetingSent(chatName) {
-  const log = getGreetingLog();
-  log[chatName] = Date.now();
-  // Eski kayitlari temizle (30 gun+)
-  const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
-  for (const key in log) {
-    if (log[key] < cutoff) delete log[key];
-  }
-  localStorage.setItem(GREETING_STORAGE_KEY, JSON.stringify(log));
-}
 
 function getCurrentChatName() {
   const header = document.querySelector('#main header');
   if (!header) return null;
   const nameSpan = header.querySelector('span[dir="auto"]');
   return nameSpan ? nameSpan.textContent.trim() : null;
-}
-
-// --- Dil algilama (mesaj iceriginden) ---
-const LANG_HINTS = {
-  tr: ['merhaba', 'meraba', 'mrb', 'selam', 'slm', 'sa', 'iyi gunler', 'iyi günler', 'hayirli gunler', 'hayırlı günler', 'nasilsiniz', 'nasılsınız'],
-  en: ['hey', 'hi', 'hello', 'helo', 'good morning', 'good evening', 'good afternoon', 'how are you', 'thanks', 'please'],
-  ar: ['selamun aleykum', 'selamun aleyküm', 'marhaba', 'ahlan', 'salam', 'شكرا', 'مرحبا', 'أهلا', 'السلام عليكم'],
-};
-
-function detectLang(text) {
-  const lower = text.toLowerCase();
-  // Bilinen kelimelere bak
-  for (const [lang, words] of Object.entries(LANG_HINTS)) {
-    if (words.includes(lower)) return lang;
-  }
-  // Arap harfleri varsa
-  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
-  // Sadece latin harf + bazi ingilizce kaliplar
-  if (/^[a-zA-Z\s.,!?']+$/.test(text)) return 'en';
-  // Varsayilan
-  return 'tr';
 }
 
 let lastChatName = null;
@@ -362,7 +335,7 @@ function initWatcher() {
 
   // 3 saniyede bir tara
   setInterval(scanForTriggers, 3000);
-  console.log('[WPPhoto] Mesaj izleyici baslatildi (14 gun kurali + #kategori)');
+  console.log('[WPPhoto] Mesaj izleyici baslatildi (#kategori aktif)');
 }
 
 function scanForTriggers() {
@@ -407,13 +380,21 @@ function scanForTriggers() {
 
       if (inMain) {
         if (!isIncoming) continue;
+
+        // Ayni chat + kategori icin 5dk cooldown
+        if (!shouldProcessTrigger(currentChat, category)) continue;
+
         console.log('[WPPhoto] Aktif chat trigger: #' + category);
+
         chrome.runtime.sendMessage({ action: 'AUTO_SEND_TRIGGER', category: category });
         return;
       } else {
         // Sidebar'dan kisi ismini bul
         const chatName = getChatNameFromSidebar(span);
         if (!chatName) continue;
+
+        // Ayni chat + kategori icin 5dk cooldown
+        if (!shouldProcessTrigger(chatName, category)) continue;
 
         console.log('[WPPhoto] Sidebar trigger: #' + category + ' -> ' + chatName);
         sidebarSwitching = true;
@@ -435,40 +416,6 @@ function scanForTriggers() {
       }
     }
 
-    // --- Otomatik karsilama: 14 gun kurali ---
-    // Aktif chat
-    if (inMain && isIncoming && currentChat) {
-      if (shouldSendGreeting(currentChat)) {
-        const lang = detectLang(text);
-        console.log('[WPPhoto] Karsilama tetiklendi (' + lang + '): ' + currentChat);
-        markGreetingSent(currentChat);
-        chrome.runtime.sendMessage({ action: 'GREETING_TRIGGER', lang: lang });
-        return;
-      }
-    }
-
-    // Sidebar: sadece okunmamis mesaj badge'i olan chatlerden tetikle
-    if (!inMain && !text.startsWith('#')) {
-      const chatName = getChatNameFromSidebar(span);
-      if (!chatName || !shouldSendGreeting(chatName)) continue;
-
-      const lang = detectLang(text);
-      console.log('[WPPhoto] Sidebar karsilama (' + lang + '): ' + chatName);
-      markGreetingSent(chatName);
-      sidebarSwitching = true;
-
-      switchToChatViaSearch(chatName).then(switched => {
-        document.querySelectorAll('#main span[dir]').forEach(s => seenSpans.add(s));
-        sidebarSwitching = false;
-        chatSwitchTime = Date.now();
-
-        if (switched) {
-          chrome.runtime.sendMessage({ action: 'GREETING_TRIGGER', lang: lang });
-        }
-      });
-
-      return;
-    }
   }
 }
 

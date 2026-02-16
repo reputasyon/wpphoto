@@ -154,6 +154,84 @@ header h1 {
   transform: translateX(18px);
 }
 
+/* Katalog bar */
+.catalog-bar {
+  padding: 0 14px;
+  margin-top: 10px;
+}
+
+.catalog-phone-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.phone-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.phone-input:focus {
+  border-color: var(--primary);
+}
+
+.phone-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.phone-save-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.phone-save-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.phone-save-btn.saved {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.catalog-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.catalog-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 /* Tumunu Gonder */
 .send-all-bar {
   padding: 10px 10px 0;
