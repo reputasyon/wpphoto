@@ -765,6 +765,9 @@ async function sendCategory(categoryName, btnElement) {
       const batch = batches[b];
       const isLastBatch = b === batches.length - 1;
 
+      // WhatsApp sekmesi aktif mi kontrol et
+      await waitForWhatsAppActive();
+
       if (batches.length > 1) {
         showToast('Grup ' + (b + 1) + '/' + batches.length + ' gonderiliyor (' + batch.length + ' foto)...', 'info');
       } else {
@@ -854,6 +857,10 @@ async function sendAllCategories() {
       }
 
       const [name, files] = sorted[i];
+
+      // WhatsApp sekmesi aktif mi kontrol et
+      await waitForWhatsAppActive();
+
       sendAllLabel.textContent = (i + 1) + '/' + total + ' ' + name;
       showToast((i + 1) + '/' + total + ' - ' + name + ' gonderiliyor...', 'info');
 
@@ -890,6 +897,9 @@ async function sendAllCategories() {
           if (sendAllCancelled) break;
           const batch = batches[b];
           const isLastBatch = b === batches.length - 1;
+
+          // WhatsApp sekmesi aktif mi kontrol et
+          await waitForWhatsAppActive();
 
           await new Promise((resolve, reject) => {
             chrome.tabs.sendMessage(tab.id, {
@@ -977,6 +987,22 @@ async function getWhatsAppTab() {
   if (tabs.length) return tabs[0];
 
   throw new Error('WhatsApp Web acik degil!');
+}
+
+// WhatsApp sekmesi aktif olana kadar bekle
+async function waitForWhatsAppActive() {
+  let warned = false;
+  while (true) {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab && activeTab.url && activeTab.url.includes('web.whatsapp.com')) {
+      return;
+    }
+    if (!warned) {
+      showToast('WhatsApp sekmesine donun - gonderim duraklatildi', 'info');
+      warned = true;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
 }
 
 async function ensureContentScript(tab) {
