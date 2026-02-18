@@ -7,11 +7,11 @@ Pick a folder, it reads your subfolders as categories, and you send photos to an
 ## How It Works
 
 ```
-📁 Products/
-├── 📁 Slim Fit/        → becomes a "Slim Fit" button (26 photos)
-├── 📁 Oversize/        → becomes an "Oversize" button (17 photos)
-├── 📁 Pants/           → becomes a "Pants" button (5 photos)
-└── 📁 Address/         → becomes an "Address" button (1 photo)
+📁 My Products/
+├── 📁 T-Shirts/        → becomes a "T-Shirts" button
+├── 📁 Shoes/           → becomes a "Shoes" button
+├── 📁 Accessories/     → becomes an "Accessories" button
+└── 📁 New Arrivals/    → becomes a "New Arrivals" button
 ```
 
 1. Open WhatsApp Web
