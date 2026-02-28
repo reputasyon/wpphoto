@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "WPPhoto - WhatsApp Urun Gonderici",
-  "version": "1.9.0",
+  "name": "WPPhoto v2 - WhatsApp Urun Gonderici",
+  "version": "2.0.4",
   "description": "WhatsApp Web uzerinden hizlica urun fotograflari gonderin",
   "permissions": [
     "sidePanel",
@@ -28,7 +28,7 @@
     }
   ],
   "action": {
-    "default_title": "WPPhoto",
+    "default_title": "WPPhoto v2",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

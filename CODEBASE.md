@@ -20,7 +20,7 @@
 
 > **Legend:** `file.ts <- A.tsx, B.tsx` = This file is **imported by** A.tsx and B.tsx.
 > Directories with `[N files: ...]` are summarized to reduce size.
-> [STATS] Showing 2 files. 1 dirs summarized, 1 dirs excluded (node_modules, etc.)
+> [STATS] Showing 18 files. 2 dirs summarized, 1 dirs excluded (node_modules, etc.)
 
 
 ```
@@ -29,12 +29,31 @@
 icons/ [3 files: 3 .png]
 lib/
   idb-keyval.js
+v2/
+  background.js
+  content.js
+  icons/ [3 files: 3 .png]
+  js/
+    app.js
+    auto-mode.js
+    catalog.js
+    constants.js
+    idb.js
+    namespace.js
+    sender.js
+    stats.js
+    tab.js
+    ui.js
+    utils.js
+  manifest.json
+  sidepanel.css
+  sidepanel.html
 ```
 
 
 ## File Dependencies
 
-> Scanned 4 files
+> Scanned 17 files
 
 
 ---
