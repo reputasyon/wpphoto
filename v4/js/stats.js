@@ -71,10 +71,10 @@ WP.stats = {
     document.getElementById('stats-count').textContent = names.length + ' kisi';
   },
 
-  // Returns Set of all contact names messaged in last 30 days
+  // Returns array of all contact names messaged in last 30 days
   async getContactedInLast30Days() {
     const allItems = await chrome.storage.local.get(null);
-    const contacted = new Set();
+    const contacted = [];
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - WP.config.STORY_SCANNER.COOLDOWN_DAYS);
 
@@ -89,11 +89,26 @@ WP.stats = {
       const entryDate = new Date(year, month, day);
       if (entryDate >= cutoffDate && Array.isArray(value)) {
         for (const name of value) {
-          contacted.add(name);
+          if (!contacted.includes(name)) contacted.push(name);
         }
       }
     }
     return contacted;
+  },
+
+  // Fuzzy match: checks if a story contact name matches any contacted name
+  // Handles cases where WhatsApp shows different name formats in chat vs status
+  isContactedRecently(storyName, contactedList) {
+    const a = storyName.toLowerCase().trim();
+    for (const contacted of contactedList) {
+      const b = contacted.toLowerCase().trim();
+      // Exact match
+      if (a === b) return true;
+      // Substring match (min 3 chars) - same logic as chat name verification
+      const minLen = Math.min(a.length, b.length);
+      if (minLen >= 3 && (a.includes(b) || b.includes(a))) return true;
+    }
+    return false;
   },
 
   // Track a contact by name directly (used by story scanner)

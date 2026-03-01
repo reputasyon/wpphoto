@@ -46,8 +46,8 @@ WP.storyScanner = {
       // --- Phase 2: Filter contacts ---
       WP.storyScanner._updateProgress(0, 0, 'Kisi gecmisi kontrol ediliyor...');
 
-      const contactedSet = await WP.stats.getContactedInLast30Days();
-      const freshContacts = scanResult.filter(name => !contactedSet.has(name));
+      const contactedList = await WP.stats.getContactedInLast30Days();
+      const freshContacts = scanResult.filter(name => !WP.stats.isContactedRecently(name, contactedList));
 
       if (freshContacts.length === 0) {
         WP.utils.showToast('Tum kisiler son 30 gunde zaten iletisime gecilmis', 'info');

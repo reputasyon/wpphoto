@@ -406,14 +406,17 @@ if (window.__wpphoto_loaded) {
     const sideEl = document.querySelector('#side');
     if (!sideEl) throw new Error('Yan panel bulunamadi');
 
+    const SKIP_NAMES = new Set(['My Status', 'Durumum', 'My status']);
+
     function scrapeNames() {
       // Try cell-frame-container items first (standard WhatsApp list items)
       const items = sideEl.querySelectorAll('[data-testid="cell-frame-container"]');
       for (const item of items) {
         const nameSpan = item.querySelector('span[dir="auto"][title]');
         if (nameSpan) {
-          const name = nameSpan.getAttribute('title') || nameSpan.textContent.trim();
-          if (name && name !== 'My Status' && name !== 'Durumum' && name.length > 1) {
+          // Use textContent (consistent with getCurrentChatName) and title as fallback
+          const name = nameSpan.textContent.trim() || nameSpan.getAttribute('title');
+          if (name && !SKIP_NAMES.has(name) && name.length > 1) {
             names.add(name);
           }
         }
@@ -422,8 +425,8 @@ if (window.__wpphoto_loaded) {
       if (names.size === 0) {
         const allSpans = sideEl.querySelectorAll('span[dir="auto"][title]');
         for (const span of allSpans) {
-          const name = span.getAttribute('title') || span.textContent.trim();
-          if (name && name !== 'My Status' && name !== 'Durumum' && name.length > 1) {
+          const name = span.textContent.trim() || span.getAttribute('title');
+          if (name && !SKIP_NAMES.has(name) && name.length > 1) {
             names.add(name);
           }
         }
