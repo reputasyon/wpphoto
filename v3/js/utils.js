@@ -15,7 +15,15 @@ WP.utils = {
     return WP.config.IMAGE_EXTENSIONS.has(ext);
   },
 
-  // arrayBufferToBase64 removed in v3: raw ArrayBuffer is sent via structured clone
+  arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunks = [];
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize)));
+    }
+    return btoa(chunks.join(''));
+  },
 
   showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(powershell -Command \"irm https://cli.claude.ai/install.ps1 | iex\")",
+      "WebSearch",
+      "Bash(powershell -Command \"irm https://claude.ai/install.ps1 | iex\")"
+    ]
+  }
+}

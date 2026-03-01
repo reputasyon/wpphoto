@@ -232,7 +232,7 @@ WP.sender = {
     for (const fileInfo of files) {
       try {
         const file = await fileInfo.handle.getFile();
-        // Use raw file size (no base64 inflation in v3)
+        // Use raw file size for batching
         items.push({ handle: fileInfo.handle, name: fileInfo.name, size: file.size });
       } catch (e) {
         console.warn('[WPPhoto] File size unreadable, skipping:', fileInfo.name);
@@ -265,9 +265,9 @@ WP.sender = {
       try {
         const file = await item.handle.getFile();
         const buffer = await file.arrayBuffer();
-        // Send raw ArrayBuffer - structured clone handles this natively
+        const base64 = WP.utils.arrayBufferToBase64(buffer);
         loaded.push({
-          buffer,
+          base64,
           fileName: file.name,
           mimeType: file.type || 'image/jpeg',
         });

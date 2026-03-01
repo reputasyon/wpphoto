@@ -63,9 +63,13 @@ if (window.__wpphoto_loaded) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // v3: receive raw ArrayBuffer instead of base64
-  function bufferToFile(buffer, fileName, mimeType) {
-    return new File([buffer], fileName, { type: mimeType });
+  function base64ToFile(base64, fileName, mimeType) {
+    const byteChars = atob(base64);
+    const byteArray = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+      byteArray[i] = byteChars.charCodeAt(i);
+    }
+    return new File([byteArray], fileName, { type: mimeType });
   }
 
   function findCaptionInput() {
@@ -153,8 +157,7 @@ if (window.__wpphoto_loaded) {
     const chatPane = querySelector(SELECTORS.chatPane);
     if (!chatPane) throw new Error('Bir sohbet acin ve tekrar deneyin');
 
-    // v3: files contain raw ArrayBuffer, not base64
-    const fileObjects = files.map(f => bufferToFile(f.buffer, f.fileName, f.mimeType));
+    const fileObjects = files.map(f => base64ToFile(f.base64, f.fileName, f.mimeType));
 
     const composeBox = querySelector(SELECTORS.composeInput);
     if (composeBox) composeBox.focus();
