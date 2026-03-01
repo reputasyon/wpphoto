@@ -386,8 +386,52 @@ if (window.__wpphoto_loaded) {
   // =========================================================
   // Story contacts scanning
   // =========================================================
+
+  // Snapshot current sidebar content to detect changes after tab click
+  function getSidebarSnapshot() {
+    const sideEl = document.querySelector('#side');
+    if (!sideEl) return '';
+    // Get first few visible names to detect content change
+    const spans = sideEl.querySelectorAll('span[dir="auto"][title]');
+    const titles = [];
+    for (let i = 0; i < Math.min(5, spans.length); i++) {
+      titles.push(spans[i].getAttribute('title') || '');
+    }
+    return titles.join('|');
+  }
+
+  // Check if Status panel is showing (look for status-specific elements)
+  function isStatusPanelActive() {
+    const sideEl = document.querySelector('#side');
+    if (!sideEl) return false;
+    // Status panel indicators: status ring, status-specific headers, "Durum" / "Status" text
+    const statusIndicators = [
+      '[data-testid="status-v3"]',
+      '[data-testid="status-v3-list"]',
+      '[data-testid="status-ring"]',
+      '[data-testid="status-unread"]',
+      'svg circle[r]', // Status ring circles around avatars
+    ];
+    for (const sel of statusIndicators) {
+      if (sideEl.querySelector(sel)) return true;
+    }
+    // Check for header text containing "Status" or "Durum"
+    const headers = sideEl.querySelectorAll('header span, [role="heading"]');
+    for (const h of headers) {
+      const text = h.textContent.trim().toLowerCase();
+      if (text === 'status' || text === 'durum') return true;
+    }
+    return false;
+  }
+
   async function scanStoryContacts() {
-    // 1. Click Status tab
+    const sideEl = document.querySelector('#side');
+    if (!sideEl) throw new Error('Yan panel bulunamadi');
+
+    // Take snapshot BEFORE clicking Status tab
+    const beforeSnapshot = getSidebarSnapshot();
+
+    // 1. Find and click Status tab button
     let statusBtn = null;
     for (const sel of STATUS_SELECTORS.statusTabBtn) {
       const el = document.querySelector(sel);
@@ -398,30 +442,46 @@ if (window.__wpphoto_loaded) {
     }
     if (!statusBtn) throw new Error('Durum sekmesi bulunamadi');
 
+    console.log('[WPPhoto] Status tab button found, clicking...');
     statusBtn.click();
-    await sleep(1500);
+    await sleep(2000);
 
-    // 2. Scrape contact names from Status list
+    // 2. Verify the panel actually changed
+    const afterSnapshot = getSidebarSnapshot();
+    const panelChanged = beforeSnapshot !== afterSnapshot;
+    const statusActive = isStatusPanelActive();
+
+    console.log('[WPPhoto] Panel changed: ' + panelChanged + ', Status active: ' + statusActive);
+
+    if (!panelChanged && !statusActive) {
+      // Try clicking once more
+      statusBtn.click();
+      await sleep(2000);
+      const retrySnapshot = getSidebarSnapshot();
+      if (beforeSnapshot === retrySnapshot && !isStatusPanelActive()) {
+        throw new Error('Durum sekmesine gecilemedi - panel degismedi');
+      }
+    }
+
+    // 3. Scrape contact names from Status list
     const names = new Set();
-    const sideEl = document.querySelector('#side');
-    if (!sideEl) throw new Error('Yan panel bulunamadi');
-
-    const SKIP_NAMES = new Set(['My Status', 'Durumum', 'My status']);
+    const SKIP_NAMES = new Set([
+      'My Status', 'Durumum', 'My status',
+      'Status', 'Durum', 'Recent', 'Viewed',
+      'Son gorulen', 'Goruldu',
+    ]);
 
     function scrapeNames() {
-      // Try cell-frame-container items first (standard WhatsApp list items)
       const items = sideEl.querySelectorAll('[data-testid="cell-frame-container"]');
       for (const item of items) {
         const nameSpan = item.querySelector('span[dir="auto"][title]');
         if (nameSpan) {
-          // Use textContent (consistent with getCurrentChatName) and title as fallback
           const name = nameSpan.textContent.trim() || nameSpan.getAttribute('title');
           if (name && !SKIP_NAMES.has(name) && name.length > 1) {
             names.add(name);
           }
         }
       }
-      // Fallback: all titled spans in #side
       if (names.size === 0) {
         const allSpans = sideEl.querySelectorAll('span[dir="auto"][title]');
         for (const span of allSpans) {
@@ -435,7 +495,7 @@ if (window.__wpphoto_loaded) {
 
     scrapeNames();
 
-    // 3. Scroll to load lazy contacts
+    // 4. Scroll to load lazy contacts
     const scrollContainer = sideEl.querySelector('[role="list"]')
       || sideEl.querySelector('[tabindex="0"]')
       || sideEl.querySelector('[data-testid="status-v3-list"]');
@@ -448,7 +508,9 @@ if (window.__wpphoto_loaded) {
       }
     }
 
-    // 4. Navigate back to Chats tab
+    console.log('[WPPhoto] Story contacts found: ' + names.size + ' -> ' + Array.from(names).join(', '));
+
+    // 5. Navigate back to Chats tab
     for (const sel of STATUS_SELECTORS.backToChats) {
       const el = document.querySelector(sel);
       if (el) {

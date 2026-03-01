@@ -176,6 +176,7 @@ document.getElementById('btn-save-phone').addEventListener('click', () => WP.app
 document.getElementById('btn-generate-catalog').addEventListener('click', () => WP.catalog.generatePage());
 document.getElementById('btn-story-scan').addEventListener('click', () => WP.storyScanner.startScan());
 document.getElementById('btn-scanner-settings').addEventListener('click', () => WP.storyScanner.toggleSettings());
+document.getElementById('btn-scanner-cancel').addEventListener('click', () => WP.storyScanner._cancelPreview());
 
 // --- Bootstrap ---
 WP.app.init();

@@ -1,7 +1,15 @@
 // WPPhoto v4 - Story Scanner: scan stories, filter contacts, send catalogs
 WP.storyScanner = {
 
+  _pendingTargets: null, // contacts waiting for user approval
+
   async startScan() {
+    // If targets are pending approval, start sending
+    if (WP.storyScanner._pendingTargets) {
+      WP.storyScanner._startSending();
+      return;
+    }
+
     if (WP.state.isSending) {
       WP.utils.showToast('Gonderim devam ediyor, bekleyin', 'info');
       return;
@@ -41,16 +49,32 @@ WP.storyScanner = {
         return;
       }
 
-      WP.utils.showToast(scanResult.length + ' kisi hikaye paylasti', 'info');
+      console.log('[WPPhoto] Hikaye paylasanlar:', scanResult);
 
       // --- Phase 2: Filter contacts ---
       WP.storyScanner._updateProgress(0, 0, 'Kisi gecmisi kontrol ediliyor...');
 
       const contactedList = await WP.stats.getContactedInLast30Days();
-      const freshContacts = scanResult.filter(name => !WP.stats.isContactedRecently(name, contactedList));
+      console.log('[WPPhoto] Son 30 gun iletisime gecilenler:', contactedList);
+
+      const freshContacts = [];
+      const skippedContacts = [];
+
+      for (const name of scanResult) {
+        if (WP.stats.isContactedRecently(name, contactedList)) {
+          skippedContacts.push(name);
+          console.log('[WPPhoto] ELENDI (son 30 gun): ' + name);
+        } else {
+          freshContacts.push(name);
+          console.log('[WPPhoto] YENI KISI: ' + name);
+        }
+      }
 
       if (freshContacts.length === 0) {
-        WP.utils.showToast('Tum kisiler son 30 gunde zaten iletisime gecilmis', 'info');
+        WP.utils.showToast(
+          'Tum ' + scanResult.length + ' kisi son 30 gunde zaten iletisime gecilmis',
+          'info'
+        );
         return;
       }
 
@@ -58,57 +82,116 @@ WP.storyScanner = {
       const dailyLimit = WP.storyScanner._getDailyLimit();
       const targets = freshContacts.slice(0, dailyLimit);
 
-      WP.utils.showToast(
-        targets.length + ' kisiye gonderilecek (' +
-        (scanResult.length - freshContacts.length) + ' elendi)',
-        'info'
-      );
+      // --- Phase 3: Show preview and wait for user approval ---
+      WP.storyScanner._pendingTargets = targets;
+      WP.storyScanner._showPreview(targets, skippedContacts, scanResult.length);
 
-      // --- Phase 3: Countdown before sending ---
-      const countdown = WP.config.STORY_SCANNER.COUNTDOWN_SEC;
-      for (let s = countdown; s > 0; s--) {
-        if (WP.state.storyScannerCancelled) {
-          WP.utils.showToast('Tarama iptal edildi', 'info');
-          return;
-        }
-        WP.storyScanner._updateProgress(0, targets.length,
-          targets.length + ' kisiye gonderim ' + s + ' saniye icinde basliyor...');
-        await WP.utils.sleep(1000);
-      }
+    } catch (err) {
+      WP.utils.showToast('Tarama hatasi: ' + err.message, 'error');
+    } finally {
+      WP.state.storyScannerRunning = false;
+      WP.storyScanner._updateUI('idle');
+    }
+  },
 
-      if (WP.state.storyScannerCancelled) {
-        WP.utils.showToast('Tarama iptal edildi', 'info');
-        return;
-      }
+  // Show scanned contacts for user review before sending
+  _showPreview(targets, skipped, totalScanned) {
+    const previewEl = document.getElementById('scanner-preview');
+    const listEl = document.getElementById('scanner-preview-list');
+    const infoEl = document.getElementById('scanner-preview-info');
 
-      // --- Phase 4: Sequential send ---
+    // Build contact list with checkboxes
+    listEl.innerHTML = '';
+    for (const name of targets) {
+      const item = document.createElement('label');
+      item.className = 'scanner-preview-item';
+      item.innerHTML =
+        '<input type="checkbox" checked value="' + WP.utils.escapeHtml(name) + '"> ' +
+        '<span>' + WP.utils.escapeHtml(name) + '</span>';
+      listEl.appendChild(item);
+    }
+
+    infoEl.textContent =
+      totalScanned + ' hikaye bulundu, ' +
+      skipped.length + ' elendi (son 30 gun), ' +
+      targets.length + ' yeni kisi';
+
+    previewEl.classList.remove('hidden');
+
+    // Update button to "Gonder" mode
+    const btn = document.getElementById('btn-story-scan');
+    const label = document.getElementById('scanner-btn-label');
+    btn.classList.add('ready');
+    btn.classList.remove('scanning');
+    label.textContent = 'Secilenleri Gonder';
+
+    // Hide progress
+    document.getElementById('scanner-progress').classList.add('hidden');
+  },
+
+  _cancelPreview() {
+    WP.storyScanner._pendingTargets = null;
+    document.getElementById('scanner-preview').classList.add('hidden');
+    WP.storyScanner._updateUI('idle');
+    WP.utils.showToast('Iptal edildi', 'info');
+  },
+
+  async _startSending() {
+    // Get checked contacts from preview
+    const checkboxes = document.querySelectorAll('#scanner-preview-list input[type="checkbox"]');
+    const selectedTargets = [];
+    for (const cb of checkboxes) {
+      if (cb.checked) selectedTargets.push(cb.value);
+    }
+
+    WP.storyScanner._pendingTargets = null;
+    document.getElementById('scanner-preview').classList.add('hidden');
+
+    if (selectedTargets.length === 0) {
+      WP.utils.showToast('Hic kisi secilmedi', 'info');
+      WP.storyScanner._updateUI('idle');
+      return;
+    }
+
+    if (WP.state.isSending) {
+      WP.utils.showToast('Gonderim devam ediyor, bekleyin', 'info');
+      WP.storyScanner._updateUI('idle');
+      return;
+    }
+
+    WP.state.storyScannerRunning = true;
+    WP.state.storyScannerCancelled = false;
+    WP.storyScanner._updateUI('scanning');
+
+    try {
+      const tab = await WP.tab.getWhatsAppTab();
+      await WP.tab.ensureContentScript(tab);
+
       const categoryToSend = WP.storyScanner._getSelectedCategory();
       let sent = 0;
       let failed = 0;
       const interContactDelay = WP.storyScanner._getInterContactDelay();
+      const total = selectedTargets.length;
 
-      for (let i = 0; i < targets.length; i++) {
+      for (let i = 0; i < total; i++) {
         if (WP.state.storyScannerCancelled) {
-          WP.utils.showToast('Iptal edildi (' + sent + '/' + targets.length + ')', 'info');
+          WP.utils.showToast('Iptal edildi (' + sent + '/' + total + ')', 'info');
           break;
         }
 
-        const contactName = targets[i];
-        WP.storyScanner._updateProgress(i, targets.length, contactName + ' aciliyor...');
+        const contactName = selectedTargets[i];
+        WP.storyScanner._updateProgress(i, total, contactName + ' aciliyor...');
 
         // Switch to contact's chat
-        const switchResult = await new Promise((resolve, reject) => {
+        const switchResult = await new Promise((resolve) => {
           chrome.tabs.sendMessage(tab.id, {
             action: 'SWITCH_TO_CHAT',
             contactName: contactName,
           }, response => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
+            if (chrome.runtime.lastError) { resolve(false); return; }
             resolve(response?.success || false);
           });
-        }).catch(() => false);
+        });
 
         if (!switchResult) {
           failed++;
@@ -120,7 +203,7 @@ WP.storyScanner = {
         await WP.utils.sleep(WP.config.STORY_SCANNER.CHAT_SETTLE);
 
         // Send photos
-        WP.storyScanner._updateProgress(i, targets.length, contactName + ' gonderiliyor...');
+        WP.storyScanner._updateProgress(i, total, contactName + ' gonderiliyor...');
 
         try {
           if (categoryToSend === '__all__') {
@@ -130,15 +213,15 @@ WP.storyScanner = {
           }
           sent++;
           await WP.stats.trackContact(contactName);
-          WP.utils.showToast((i + 1) + '/' + targets.length + ' - ' + contactName + ' gonderildi', 'success');
+          WP.utils.showToast((i + 1) + '/' + total + ' - ' + contactName + ' gonderildi', 'success');
         } catch (err) {
           failed++;
           WP.utils.showToast(contactName + ' gonderilemedi: ' + err.message, 'error');
         }
 
         // Wait between contacts
-        if (i < targets.length - 1 && !WP.state.storyScannerCancelled) {
-          WP.storyScanner._updateProgress(i + 1, targets.length,
+        if (i < total - 1 && !WP.state.storyScannerCancelled) {
+          WP.storyScanner._updateProgress(i + 1, total,
             'Bekleniyor (' + (interContactDelay / 1000) + 's)...');
           await WP.utils.sleep(interContactDelay);
         }
@@ -148,7 +231,7 @@ WP.storyScanner = {
       WP.utils.showToast(msg, failed > 0 ? 'info' : 'success');
 
     } catch (err) {
-      WP.utils.showToast('Tarama hatasi: ' + err.message, 'error');
+      WP.utils.showToast('Gonderim hatasi: ' + err.message, 'error');
     } finally {
       WP.state.storyScannerRunning = false;
       WP.state.storyScannerCancelled = false;
@@ -259,11 +342,13 @@ WP.storyScanner = {
     if (state === 'scanning') {
       bar.classList.add('active');
       btn.classList.add('scanning');
+      btn.classList.remove('ready');
       label.textContent = 'Durdur';
       progress.classList.remove('hidden');
     } else {
       bar.classList.remove('active');
       btn.classList.remove('scanning');
+      btn.classList.remove('ready');
       label.textContent = 'Hikayeleri Tara';
       progress.classList.add('hidden');
     }

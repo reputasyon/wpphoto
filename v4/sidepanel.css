@@ -622,6 +622,81 @@ header h1 {
   color: #fff;
 }
 
+.scanner-btn.ready {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.scanner-btn.ready:hover {
+  background: #1ebe59;
+  color: #fff;
+}
+
+/* Scanner preview list */
+.scanner-preview {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.scanner-preview-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.scanner-preview-list {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scanner-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.scanner-preview-item:hover {
+  background: var(--bg-hover);
+}
+
+.scanner-preview-item input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.scanner-cancel-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.scanner-cancel-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .scanner-progress {
   margin-top: 8px;
 }
