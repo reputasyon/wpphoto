@@ -3,6 +3,8 @@ WP.contactScanner = {
 
   _pendingTargets: null,
   _allScannedContacts: null,
+  _CACHE_KEY: 'contactListCache',
+  _CACHE_MAX_AGE: 24 * 60 * 60 * 1000, // 24 saat
 
   async startScan() {
     if (WP.contactScanner._pendingTargets) {
@@ -19,6 +21,58 @@ WP.contactScanner = {
       return;
     }
 
+    // Cache kontrol
+    const cached = await WP.contactScanner._loadFromCache();
+    if (cached) {
+      WP.contactScanner._applyFilterAndPreview(cached, true);
+      return;
+    }
+
+    // Cache yok veya eski — WhatsApp'tan tara
+    await WP.contactScanner._scanFromWhatsApp();
+  },
+
+  async forceScan() {
+    if (WP.state.isSending || WP.state.contactScannerRunning) {
+      WP.utils.showToast('Islem devam ediyor, bekleyin', 'info');
+      return;
+    }
+    // Preview aciksa kapat
+    WP.contactScanner._pendingTargets = null;
+    WP.contactScanner._allScannedContacts = null;
+    document.getElementById('contact-scanner-preview').classList.add('hidden');
+
+    await chrome.storage.local.remove(WP.contactScanner._CACHE_KEY);
+    await WP.contactScanner._scanFromWhatsApp();
+  },
+
+  async _loadFromCache() {
+    const result = await chrome.storage.local.get(WP.contactScanner._CACHE_KEY);
+    const cache = result[WP.contactScanner._CACHE_KEY];
+    if (!cache || !cache.contacts || !cache.timestamp) return null;
+
+    const age = Date.now() - cache.timestamp;
+    if (age > WP.contactScanner._CACHE_MAX_AGE) {
+      console.log('[WPPhoto] Cache eski (' + Math.round(age / 3600000) + ' saat), yeniden taranacak');
+      return null;
+    }
+
+    console.log('[WPPhoto] Cache\'den yuklendi: ' + cache.contacts.length + ' kisi (' + Math.round(age / 60000) + ' dk once)');
+    return cache.contacts;
+  },
+
+  async _saveToCache(contacts) {
+    await chrome.storage.local.set({
+      [WP.contactScanner._CACHE_KEY]: {
+        contacts: contacts,
+        timestamp: Date.now(),
+        count: contacts.length,
+      },
+    });
+    console.log('[WPPhoto] Cache kaydedildi: ' + contacts.length + ' kisi');
+  },
+
+  async _scanFromWhatsApp() {
     WP.state.contactScannerRunning = true;
     WP.state.contactScannerCancelled = false;
     WP.contactScanner._updateUI('scanning');
@@ -50,23 +104,10 @@ WP.contactScanner = {
 
       console.log('[WPPhoto] Rehber kisileri: ' + scanResult.length + ' kisi');
 
-      // Pre-filter: remove contacts messaged in last 30 days (from stats)
-      const contacted = await WP.stats.getContactedInLast30Days();
-      const filtered = scanResult.filter(name => !WP.stats.isContactedRecently(name, contacted));
+      // Cache'e kaydet
+      await WP.contactScanner._saveToCache(scanResult);
 
-      console.log('[WPPhoto] Pre-filter: ' + scanResult.length + ' → ' + filtered.length + ' (' + (scanResult.length - filtered.length) + ' cikarildi)');
-
-      if (filtered.length === 0) {
-        WP.utils.showToast('Tum kisiler son 30 gunde zaten mesajlasilmis', 'info');
-        return;
-      }
-
-      const dailyLimit = WP.contactScanner._getDailyLimit();
-      const targets = filtered.slice(0, dailyLimit);
-
-      WP.contactScanner._allScannedContacts = filtered;
-      WP.contactScanner._pendingTargets = targets;
-      WP.contactScanner._showPreview(targets, scanResult.length, filtered.length);
+      WP.contactScanner._applyFilterAndPreview(scanResult, false);
 
     } catch (err) {
       WP.utils.showToast('Tarama hatasi: ' + err.message, 'error');
@@ -78,7 +119,29 @@ WP.contactScanner = {
     }
   },
 
-  _showPreview(targets, totalScanned, totalAfterFilter) {
+  async _applyFilterAndPreview(allContacts, fromCache) {
+    // Pre-filter: remove contacts messaged in last 30 days (from stats)
+    const contacted = await WP.stats.getContactedInLast30Days();
+    const filtered = allContacts.filter(name => !WP.stats.isContactedRecently(name, contacted));
+
+    const source = fromCache ? 'cache' : 'tarama';
+    console.log('[WPPhoto] Pre-filter (' + source + '): ' + allContacts.length + ' → ' + filtered.length + ' (' + (allContacts.length - filtered.length) + ' cikarildi)');
+
+    if (filtered.length === 0) {
+      WP.utils.showToast('Tum kisiler son 30 gunde zaten mesajlasilmis', 'info');
+      WP.contactScanner._updateUI('idle');
+      return;
+    }
+
+    const dailyLimit = WP.contactScanner._getDailyLimit();
+    const targets = filtered.slice(0, dailyLimit);
+
+    WP.contactScanner._allScannedContacts = filtered;
+    WP.contactScanner._pendingTargets = targets;
+    WP.contactScanner._showPreview(targets, allContacts.length, filtered.length, fromCache);
+  },
+
+  _showPreview(targets, totalScanned, totalAfterFilter, fromCache) {
     const previewEl = document.getElementById('contact-scanner-preview');
     const listEl = document.getElementById('contact-scanner-preview-list');
     const infoEl = document.getElementById('contact-scanner-preview-info');
@@ -99,8 +162,9 @@ WP.contactScanner = {
       listEl.appendChild(item);
     }
 
+    const source = fromCache ? ' (cache)' : '';
     infoEl.textContent =
-      totalScanned + ' kisi bulundu, ' + (totalScanned - totalAfterFilter) + ' cikarildi (30 gun), ' + targets.length + ' listelendi';
+      totalScanned + ' kisi' + source + ', ' + (totalScanned - totalAfterFilter) + ' cikarildi (30 gun), ' + targets.length + ' listelendi';
 
     previewEl.classList.remove('hidden');
 

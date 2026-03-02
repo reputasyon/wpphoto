@@ -183,6 +183,7 @@ document.getElementById('btn-scanner-cancel').addEventListener('click', () => WP
 
 // Contact scanner events
 document.getElementById('btn-contact-scan').addEventListener('click', () => WP.contactScanner.startScan());
+document.getElementById('btn-contact-rescan').addEventListener('click', () => WP.contactScanner.forceScan());
 document.getElementById('btn-contact-scanner-settings').addEventListener('click', () => WP.contactScanner.toggleSettings());
 document.getElementById('btn-contact-scanner-cancel').addEventListener('click', () => WP.contactScanner._cancelPreview());
 

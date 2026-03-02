@@ -570,6 +570,33 @@ header h1 {
   color: var(--primary);
 }
 
+.scanner-btn-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.scanner-btn-row .scanner-btn {
+  flex: 1;
+}
+
+.rescan-btn {
+  padding: 8px 10px;
+  font-size: 16px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rescan-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
 /* Story Scanner (legacy class compat) */
 .story-scanner-bar {
   padding: 0 10px;

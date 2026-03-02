@@ -151,12 +151,15 @@
         <input type="text" id="contact-scanner-excluded-labels" class="scanner-input wide" placeholder="KARGO FIRMALARI, TEDARIKCI">
       </div>
     </div>
-    <button id="btn-contact-scan" class="scanner-btn">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-      </svg>
-      <span id="contact-scanner-btn-label">Rehberi Tara</span>
-    </button>
+    <div class="scanner-btn-row">
+      <button id="btn-contact-scan" class="scanner-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+        <span id="contact-scanner-btn-label">Rehberi Tara</span>
+      </button>
+      <button id="btn-contact-rescan" class="icon-btn rescan-btn" title="Yeniden Tara">↻</button>
+    </div>
     <div id="contact-scanner-progress" class="scanner-progress hidden">
       <div class="scanner-progress-bar">
         <div id="contact-scanner-progress-fill" class="scanner-progress-fill"></div>
