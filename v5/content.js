@@ -479,7 +479,7 @@ if (window.__wpphoto_loaded) {
       return false;
     }
 
-    // 4. Click search box via debugger to ensure trusted focus, then type
+    // 4. Click search box via debugger to ensure trusted focus
     const boxRect = searchBox.getBoundingClientRect();
     const bx = Math.round(boxRect.left + boxRect.width / 2);
     const by = Math.round(boxRect.top + boxRect.height / 2);
@@ -487,6 +487,12 @@ if (window.__wpphoto_loaded) {
       chrome.runtime.sendMessage({ action: 'DEBUGGER_CLICK', x: bx, y: by }, () => resolve());
     });
     await sleep(500);
+
+    // 4b. Clear search box from content script side (safer than Ctrl+A via debugger)
+    searchBox.focus();
+    searchBox.textContent = '';
+    searchBox.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await sleep(200);
 
     // Type via chrome.debugger (trusted input that React picks up)
     await new Promise((resolve) => {

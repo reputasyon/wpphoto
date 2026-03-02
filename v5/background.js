@@ -67,39 +67,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      // First select all existing text (Ctrl+A) then delete it (Backspace)
-      const selectAll = (cb) => {
-        chrome.debugger.sendCommand(debuggee, 'Input.dispatchKeyEvent', {
-          type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2, // 2 = Ctrl
-        }, () => {
-          chrome.debugger.sendCommand(debuggee, 'Input.dispatchKeyEvent', {
-            type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2,
-          }, cb);
-        });
-      };
-
-      const deleteSelected = (cb) => {
-        chrome.debugger.sendCommand(debuggee, 'Input.dispatchKeyEvent', {
-          type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8,
-        }, () => {
-          chrome.debugger.sendCommand(debuggee, 'Input.dispatchKeyEvent', {
-            type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8,
-          }, cb);
-        });
-      };
-
-      const typeText = (cb) => {
-        chrome.debugger.sendCommand(debuggee, 'Input.insertText', { text }, cb);
-      };
-
-      // Clear existing text, then type new text, then detach
-      selectAll(() => {
-        deleteSelected(() => {
-          typeText(() => {
-            chrome.debugger.detach(debuggee, () => {
-              sendResponse({ success: true });
-            });
-          });
+      // Just type text directly (search box is already cleared by content script)
+      chrome.debugger.sendCommand(debuggee, 'Input.insertText', { text }, () => {
+        chrome.debugger.detach(debuggee, () => {
+          sendResponse({ success: true });
         });
       });
     });
