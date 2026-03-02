@@ -5,7 +5,13 @@
       "Bash(powershell -Command \"irm https://cli.claude.ai/install.ps1 | iex\")",
       "WebSearch",
       "Bash(powershell -Command \"irm https://claude.ai/install.ps1 | iex\")",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__close_page",
+      "Bash(git add:*)"
     ]
   }
 }

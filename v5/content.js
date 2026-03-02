@@ -576,6 +576,194 @@ if (window.__wpphoto_loaded) {
   // Story contacts scanning
   // =========================================================
 
+  // =========================================================
+  // Contact List Scanner — scan all contacts via "New Chat" button
+  // =========================================================
+  async function scanContactList() {
+    // 1. Find and click "New Chat" button
+    const newChatSelectors = [
+      'span[data-icon="new-chat-outline"]',
+      'span[data-icon="chat-refresh"]',
+      'span[data-icon="new-chat"]',
+      'button[aria-label="Yeni sohbet"]',
+      'button[aria-label="New chat"]',
+      'button[aria-label="Yeni sohbet başlat"]',
+      '[data-testid="menu-bar-new-chat"]',
+    ];
+
+    let newChatBtn = null;
+    for (const sel of newChatSelectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        newChatBtn = el.closest('button') || el;
+        break;
+      }
+    }
+    if (!newChatBtn) throw new Error('Yeni sohbet butonu bulunamadi');
+
+    console.log('[WPPhoto] Clicking New Chat button...');
+    newChatBtn.click();
+    await sleep(2000);
+
+    // 2. Scrape contacts from the panel
+    const names = new Set();
+    const SKIP_NAMES = new Set([
+      'My Status', 'Durumum', 'My status', 'Durum güncellemem',
+      'Status', 'Durum', 'Güncellemeler', 'Updates',
+      'Kanallar', 'Channels', 'WhatsApp', 'Meta',
+      'Yeni grup', 'New group', 'Yeni topluluk', 'New community',
+      'Aratın veya yeni sohbet başlatın', 'Sık iletişim kurulanlar',
+      'Frequently contacted', 'WHATSAPP\'TAKİ KİŞİLER', 'CONTACTS ON WHATSAPP',
+    ]);
+
+    function isValidContact(name) {
+      if (!name || name.length <= 1) return false;
+      if (SKIP_NAMES.has(name)) return false;
+      // Skip section headers (all caps, short)
+      if (name === name.toUpperCase() && name.length < 30) return false;
+      // Skip phone numbers (only digits, spaces, plus, dashes)
+      if (/^[\d\s+\-()]+$/.test(name)) return false;
+      return true;
+    }
+
+    function scrapeContacts() {
+      // Contact list panel shows span[title] for each contact
+      const spans = document.querySelectorAll('#app span[title]');
+      for (const span of spans) {
+        if (span.offsetHeight === 0) continue;
+        if (span.closest('#main')) continue;
+        if (span.closest('[contenteditable]')) continue;
+        const name = (span.getAttribute('title') || '').trim();
+        if (isValidContact(name)) {
+          names.add(name);
+        }
+      }
+    }
+
+    scrapeContacts();
+
+    // 3. Scroll to load all contacts (virtualized list)
+    // Find the scrollable container within the new chat panel
+    let scrollContainer = null;
+    const panels = document.querySelectorAll('#app div[tabindex]');
+    for (const panel of panels) {
+      if (panel.scrollHeight > panel.clientHeight + 100 && panel.querySelector('span[title]')) {
+        scrollContainer = panel;
+        break;
+      }
+    }
+
+    if (!scrollContainer) {
+      // Fallback: find scrollable parent of first contact
+      const firstContact = document.querySelector('#app span[title]:not(#main span[title])');
+      if (firstContact) {
+        let parent = firstContact.parentElement;
+        while (parent && parent !== document.body) {
+          if (parent.scrollHeight > parent.clientHeight + 100) {
+            scrollContainer = parent;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+      }
+    }
+
+    if (scrollContainer) {
+      console.log('[WPPhoto] Scrolling contact list...');
+      let prevCount = 0;
+      let noNewCount = 0;
+      // Scroll until no new contacts appear (max 100 iterations)
+      for (let i = 0; i < 100; i++) {
+        scrollContainer.scrollTop += 800;
+        await sleep(600);
+        scrapeContacts();
+        if (names.size === prevCount) {
+          noNewCount++;
+          if (noNewCount >= 5) break; // No new contacts after 5 scrolls
+        } else {
+          noNewCount = 0;
+          prevCount = names.size;
+        }
+        if (i % 10 === 0) {
+          console.log('[WPPhoto] Scroll iteration ' + i + ', contacts: ' + names.size);
+        }
+      }
+    }
+
+    console.log('[WPPhoto] Contact list: ' + names.size + ' contacts found');
+
+    // 4. Close the new chat panel (press Escape or click back button)
+    const backSelectors = [
+      'span[data-icon="back"]',
+      'span[data-icon="back-refreshed"]',
+      'button[aria-label="Geri"]',
+      'button[aria-label="Back"]',
+    ];
+    let closedPanel = false;
+    for (const sel of backSelectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        (el.closest('button') || el).click();
+        closedPanel = true;
+        break;
+      }
+    }
+    if (!closedPanel) {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+      }));
+    }
+    await sleep(500);
+
+    return Array.from(names);
+  }
+
+  // =========================================================
+  // Chat Label Detection — check header for WhatsApp labels
+  // =========================================================
+  function getChatLabels() {
+    const mainEl = document.querySelector('#main');
+    if (!mainEl) return [];
+
+    const header = mainEl.querySelector('header');
+    if (!header) return [];
+
+    const labels = [];
+
+    // WhatsApp labels appear as colored badges in the header
+    // They typically have a colored background and text content
+    // Look for spans/divs that contain label text near the contact name area
+    const allElements = header.querySelectorAll('span, div');
+    for (const el of allElements) {
+      // Skip the contact name itself (typically the first large span)
+      if (el.getAttribute('dir') === 'auto' && el.closest('[data-testid="conversation-info-header"]')) continue;
+      if (el.closest('[contenteditable]')) continue;
+
+      const text = el.textContent.trim();
+      if (!text || text.length < 2 || text.length > 50) continue;
+
+      // Labels have background color (not transparent)
+      const style = window.getComputedStyle(el);
+      const bg = style.backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== 'rgb(32, 44, 51)' && bg !== 'rgb(17, 27, 33)') {
+        // This element has a non-default background — likely a label badge
+        labels.push(text);
+      }
+    }
+
+    // Also try: look for label-specific data attributes or aria labels
+    const labelBadges = header.querySelectorAll('[data-testid*="label"], [aria-label*="etiket"], [aria-label*="label"]');
+    for (const badge of labelBadges) {
+      const text = badge.textContent.trim();
+      if (text && text.length >= 2 && !labels.includes(text)) {
+        labels.push(text);
+      }
+    }
+
+    console.log('[WPPhoto] Chat labels: ' + JSON.stringify(labels));
+    return labels;
+  }
+
   async function scanStoryContacts() {
     // 1. Find and click Status tab button
     let statusBtn = null;
@@ -949,6 +1137,19 @@ if (window.__wpphoto_loaded) {
       return true;
     }
 
+    if (message.action === 'SCAN_CONTACT_LIST') {
+      scanContactList()
+        .then(contacts => sendResponse({ success: true, contacts }))
+        .catch(err => sendResponse({ success: false, error: err.message, contacts: [] }));
+      return true;
+    }
+
+    if (message.action === 'CHECK_CHAT_LABELS') {
+      const labels = getChatLabels();
+      sendResponse({ labels });
+      return false;
+    }
+
     if (message.action === 'CHECK_CHAT_RECENCY') {
       const hasRecent = hasRecentMessages(message.days || 30);
       sendResponse(hasRecent);
@@ -973,5 +1174,5 @@ if (window.__wpphoto_loaded) {
   // =========================================================
   setTimeout(initWatcher, 2000);
 
-  console.log('[WPPhoto] Content script v4.0.0 loaded');
+  console.log('[WPPhoto] Content script v5.0.0 loaded');
 }
