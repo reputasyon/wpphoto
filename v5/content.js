@@ -629,16 +629,53 @@ if (window.__wpphoto_loaded) {
       if (name === name.toUpperCase() && name.length < 30) return false;
       // Skip phone numbers (only digits, spaces, plus, dashes)
       if (/^[\d\s+\-()]+$/.test(name)) return false;
+      // Skip file names (contain file extensions)
+      if (/\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|mp3|pdf|doc|txt|zip)$/i.test(name)) return false;
+      // Skip folder-like names (contain path separators or look like folder paths)
+      if (name.includes('/') || name.includes('\\')) return false;
+      // Skip very long names (likely not contact names)
+      if (name.length > 60) return false;
+      // Skip names that look like timestamps or dates
+      if (/^\d{1,2}[:.\/]\d{1,2}([:.\/]\d{2,4})?$/.test(name)) return false;
+      // Skip names that are just emoji
+      if (/^[\p{Emoji}\s]+$/u.test(name) && name.trim().length <= 4) return false;
       return true;
     }
 
+    // Find the "New Chat" panel — it overlays the chat list inside #side
+    // Look for a header containing "Yeni sohbet" / "New chat" text
+    let contactPanel = null;
+    const allHeaders = document.querySelectorAll('#side header, #app header');
+    for (const header of allHeaders) {
+      const text = header.textContent.trim().toLowerCase();
+      if (text.includes('yeni sohbet') || text.includes('new chat') || text.includes('yeni mesaj') || text.includes('new message')) {
+        // The contact list panel is the parent or sibling of this header
+        contactPanel = header.closest('[data-tab]') || header.parentElement;
+        break;
+      }
+    }
+    if (!contactPanel) {
+      // Fallback: use #side
+      contactPanel = document.getElementById('side') || document.getElementById('app');
+    }
+
+    console.log('[WPPhoto] Contact panel: ' + (contactPanel?.tagName || 'null') + ', class: ' + (contactPanel?.className || '').slice(0, 50));
+
     function scrapeContacts() {
-      // Contact list panel shows span[title] for each contact
-      const spans = document.querySelectorAll('#app span[title]');
+      const spans = contactPanel.querySelectorAll('span[title]');
       for (const span of spans) {
         if (span.offsetHeight === 0) continue;
         if (span.closest('#main')) continue;
         if (span.closest('[contenteditable]')) continue;
+        // Skip items that have a message preview (these are chat list items, not contacts)
+        const listItem = span.closest('[role="listitem"]') || span.closest('[data-id]') || span.closest('[tabindex="-1"]');
+        if (listItem) {
+          // Contact list items in "New Chat" panel do NOT have message preview spans
+          // Chat list items DO have a second span with last message text
+          const previewSpans = listItem.querySelectorAll('span[title]');
+          // If there are 2+ titled spans, the second is likely a message preview — skip if it looks like a chat
+          if (previewSpans.length >= 2 && listItem.querySelector('span[data-testid="last-msg-status"]')) continue;
+        }
         const name = (span.getAttribute('title') || '').trim();
         if (isValidContact(name)) {
           names.add(name);
@@ -649,13 +686,26 @@ if (window.__wpphoto_loaded) {
     scrapeContacts();
 
     // 3. Scroll to load all contacts (virtualized list)
-    // Find the scrollable container within the new chat panel
+    // Find the scrollable container within the contact panel
     let scrollContainer = null;
-    const panels = document.querySelectorAll('#app div[tabindex]');
-    for (const panel of panels) {
-      if (panel.scrollHeight > panel.clientHeight + 100 && panel.querySelector('span[title]')) {
+    const scrollCandidates = contactPanel.querySelectorAll('div[tabindex], div[role="list"]');
+    for (const panel of scrollCandidates) {
+      if (panel.scrollHeight > panel.clientHeight + 100) {
         scrollContainer = panel;
         break;
+      }
+    }
+    // Fallback: try contactPanel itself or broader search
+    if (!scrollContainer && contactPanel.scrollHeight > contactPanel.clientHeight + 100) {
+      scrollContainer = contactPanel;
+    }
+    if (!scrollContainer) {
+      const panels = document.querySelectorAll('#app div[tabindex]');
+      for (const panel of panels) {
+        if (panel.scrollHeight > panel.clientHeight + 100 && panel.querySelector('span[title]')) {
+          scrollContainer = panel;
+          break;
+        }
       }
     }
 
